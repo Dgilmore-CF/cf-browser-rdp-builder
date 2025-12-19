@@ -308,19 +308,51 @@ function Invoke-CloudflareApi {
     
     try {
         Write-Log "API Call: $Method $Endpoint" -Level "DEBUG"
+        if ($Body) {
+            Write-Log "API Request Body: $($params.Body)" -Level "DEBUG"
+        }
         $response = Invoke-RestMethod @params
         
         if ($response.success -eq $false -and -not $IgnoreErrors) {
-            $errorMsg = ($response.errors | ForEach-Object { $_.message }) -join "; "
+            $errorMsg = ($response.errors | ForEach-Object { "Code: $($_.code), Message: $($_.message)" }) -join "; "
+            Write-Log "Cloudflare API returned error: $errorMsg" -Level "ERROR"
             throw "Cloudflare API Error: $errorMsg"
         }
         
         return $response
     }
+    catch [System.Net.WebException] {
+        if (-not $IgnoreErrors) {
+            $errorMessage = $_.Exception.Message
+            Write-Log "API Error: $errorMessage" -Level "ERROR"
+            
+            # Try to get the response body from the error
+            try {
+                $errorResponse = $_.Exception.Response
+                if ($errorResponse) {
+                    $stream = $errorResponse.GetResponseStream()
+                    $reader = New-Object System.IO.StreamReader($stream)
+                    $responseBody = $reader.ReadToEnd()
+                    $reader.Close()
+                    $stream.Close()
+                    Write-Log "Cloudflare API Error Response: $responseBody" -Level "ERROR"
+                }
+            } catch {
+                Write-Log "Could not read error response body" -Level "DEBUG"
+            }
+            throw
+        }
+        return $null
+    }
     catch {
         if (-not $IgnoreErrors) {
             $errorMessage = $_.Exception.Message
             Write-Log "API Error: $errorMessage" -Level "ERROR"
+            
+            # For other exceptions, try to extract error details
+            if ($_.ErrorDetails.Message) {
+                Write-Log "Error Details: $($_.ErrorDetails.Message)" -Level "ERROR"
+            }
             throw
         }
         return $null
