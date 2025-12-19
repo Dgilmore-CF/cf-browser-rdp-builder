@@ -534,7 +534,8 @@ function Get-CloudflareDnsRecords {
     
     $endpoint = "/zones/$($script:Config.CloudflareZoneId)/dns_records"
     if (-not [string]::IsNullOrEmpty($Name)) {
-        $endpoint += "?name=$Name"
+        $encodedName = [System.Web.HttpUtility]::UrlEncode($Name)
+        $endpoint += "?name=$encodedName"
     }
     
     $response = Invoke-CloudflareApi -Endpoint $endpoint
@@ -1155,6 +1156,9 @@ function Sync-BrowserRDPApplications {
     Write-Log "  Apps to potentially remove: $($appsToRemove.Count)" -Level "INFO"
     Write-Log ("=" * 60) -NoTimestamp
     
+    # Track errors during sync
+    $script:SyncErrors = @()
+    
     # Create new users' Browser RDP apps
     if ($usersToCreate.Count -gt 0) {
         Write-Log "Creating Browser RDP applications for new users..." -Level "INFO"
@@ -1193,6 +1197,7 @@ function Sync-BrowserRDPApplications {
             }
             catch {
                 Write-Log "Failed to configure Browser RDP for $($user.Email): $($_.Exception.Message)" -Level "ERROR"
+                $script:SyncErrors += "Failed to configure: $($user.Email)"
             }
         }
     }
@@ -1222,6 +1227,7 @@ function Sync-BrowserRDPApplications {
                 }
                 catch {
                     Write-Log "Failed to remove application for $($removal.Email): $($_.Exception.Message)" -Level "ERROR"
+                    $script:SyncErrors += "Failed to remove: $($removal.Email)"
                 }
             } else {
                 Write-Log "Skipped removal of application for $($removal.Email)" -Level "INFO"
@@ -1229,7 +1235,15 @@ function Sync-BrowserRDPApplications {
         }
     }
     
-    Write-Log "Sync completed" -Level "SUCCESS"
+    # Report final status
+    if ($script:SyncErrors.Count -gt 0) {
+        Write-Log "Sync completed with $($script:SyncErrors.Count) error(s)" -Level "WARN"
+        foreach ($err in $script:SyncErrors) {
+            Write-Log "  - $err" -Level "WARN"
+        }
+    } else {
+        Write-Log "Sync completed successfully" -Level "SUCCESS"
+    }
 }
 
 #endregion
