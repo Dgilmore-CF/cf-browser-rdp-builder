@@ -743,6 +743,7 @@ function Get-CloudflareAccessApplications {
     $response = Invoke-CloudflareApi -Endpoint "/accounts/$($script:Config.CloudflareAccountId)/access/apps"
     
     if ($response.result) {
+        Write-Log "Found $($response.result.Count) existing Access Application(s)" -Level "DEBUG"
         return $response.result
     }
     
@@ -769,12 +770,15 @@ function New-CloudflareAccessApplication {
     
     # Check if application already exists (by name or domain)
     $existingApps = @(Get-CloudflareAccessApplications)
+    Write-Log "Searching for app with name '$Name' or domain '$PublicHostname'" -Level "DEBUG"
     $existingApp = $existingApps | Where-Object { $_.name -eq $Name -or $_.domain -eq $PublicHostname }
     
     if ($existingApp) {
         Write-Log "Access Application already exists (Name: $($existingApp.name), Domain: $($existingApp.domain))" -Level "WARN"
         return $existingApp
     }
+    
+    Write-Log "No existing app found, will create new one" -Level "DEBUG"
     
     if ($DryRun) {
         Write-Log "[DRY RUN] Would create Access Application: $Name with domain $PublicHostname" -Level "INFO"
