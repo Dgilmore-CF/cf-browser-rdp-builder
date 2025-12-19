@@ -82,7 +82,8 @@ Configure the following permissions for your API token:
 
 | Permission Category | Permission | Access Level | Purpose |
 |---------------------|------------|--------------|---------|
-| **Account** | Access: Apps and Policies | Edit | Create/modify/delete Access Applications, Policies, and Infrastructure Targets |
+| **Account** | Zero Trust | Edit | Create/modify Infrastructure Targets |
+| **Account** | Access: Apps and Policies | Edit | Create/modify/delete Access Applications and Policies |
 | **Account** | Access: Organizations, Identity Providers, and Groups | Read | List Identity Providers for interactive selection |
 | **Account** | Cloudflare Tunnel | Read | List available tunnels for interactive selection |
 | **Account** | Cloudflare Tunnel | Edit | Add CIDR routes to tunnel configuration |
@@ -95,6 +96,7 @@ Configure the following permissions for your API token:
 ```
 Token Name: Browser RDP Management Script
 Permissions:
+  Account - Zero Trust - Edit
   Account - Access: Apps and Policies - Edit
   Account - Access: Organizations, Identity Providers, and Groups - Read  
   Account - Cloudflare Tunnel - Read
