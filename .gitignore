@@ -1,0 +1,24 @@
+# Logs
+*.log
+logs/
+
+# Sensitive configuration (if any local config files are created)
+*.secret
+*.credentials
+config.local.ps1
+
+# PowerShell temp files
+*.tmp
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
