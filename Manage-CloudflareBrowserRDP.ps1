@@ -320,6 +320,14 @@ function Invoke-CloudflareApi {
     catch {
         if (-not $IgnoreErrors) {
             Write-Log "API Error: $($_.Exception.Message)" -Level "ERROR"
+            # Try to get more details from the response
+            if ($_.Exception.Response) {
+                try {
+                    $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+                    $responseBody = $reader.ReadToEnd()
+                    Write-Log "API Response: $responseBody" -Level "DEBUG"
+                } catch {}
+            }
             throw
         }
         return $null
