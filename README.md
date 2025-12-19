@@ -87,6 +87,8 @@ Configure the following permissions for your API token:
 | **Account** | Cloudflare Tunnel | Read | List available tunnels for interactive selection |
 | **Account** | Cloudflare Tunnel | Edit | Add CIDR routes to tunnel configuration |
 | **Account** | Account Settings | Read | Verify account access |
+| **Zone** | Zone | Read | List available zones for interactive selection |
+| **Zone** | DNS | Edit | Create/delete DNS records for user RDP hostnames |
 
 ### Token Configuration Summary
 
@@ -99,6 +101,11 @@ Permissions:
   Account - Cloudflare Tunnel - Read
   Account - Cloudflare Tunnel - Edit
   Account - Account Settings - Read
+  Zone - Zone - Read
+  Zone - DNS - Edit
+
+Zone Resources:
+  Include - All zones (or specific zones where DNS records will be created)
 
 Account Resources:
   Include - [Your Account Name]
@@ -132,6 +139,15 @@ TTL (Optional):
 - **List** existing routes to avoid duplicates
 - **Remove** routes when applications are removed
 
+#### Zone (Read)
+- **List** available zones for interactive selection
+- **Read** zone details to get zone name for DNS record creation
+
+#### DNS (Edit)
+- **Create** CNAME DNS records in format `{samaccountname}-rdp.{zonename}`
+- **List** existing DNS records to avoid duplicates
+- **Delete** DNS records when applications are removed
+
 ---
 
 ## Environment Variables
@@ -143,7 +159,7 @@ The script supports configuration via environment variables for automation scena
 | `CF_ACCOUNT_ID` | Cloudflare Account ID | `abcd1234567890` |
 | `CF_API_TOKEN` | Cloudflare API Token | `your-api-token` |
 | `CF_TUNNEL_ID` | Cloudflare Tunnel ID | `12345678-abcd-...` |
-| `CF_BROWSER_RDP_HOSTNAME` | Public Browser RDP hostname | `rdp.company.com` |
+| `CF_ZONE_ID` | Cloudflare Zone ID for DNS records | `12345678-abcd-...` |
 | `CF_IDP_ID` | Identity Provider ID | `12345678-abcd-...` |
 | `CF_BROWSER_RDP_AD_OU` | AD OU Distinguished Name | `OU=RDPUsers,DC=contoso,DC=com` |
 | `CF_BROWSER_RDP_AD_HOSTNAME_ATTR` | AD attribute for RDP hostname | `extensionAttribute1` |
@@ -225,7 +241,7 @@ The script will prompt for all required values.
     -CloudflareAccountId "your-account-id" `
     -CloudflareApiToken "your-api-token" `
     -CloudflareTunnelId "your-tunnel-id" `
-    -BrowserRDPHostname "rdp.company.com" `
+    -CloudflareZoneId "your-zone-id" `
     -IdentityProviderId "your-idp-id"
 ```
 
@@ -235,7 +251,7 @@ The script will prompt for all required values.
 $env:CF_ACCOUNT_ID = "your-account-id"
 $env:CF_API_TOKEN = "your-api-token"
 $env:CF_TUNNEL_ID = "your-tunnel-id"
-$env:CF_BROWSER_RDP_HOSTNAME = "rdp.company.com"
+$env:CF_ZONE_ID = "your-zone-id"
 $env:CF_BROWSER_RDP_AD_OU = "OU=RDPUsers,DC=contoso,DC=com"
 $env:CF_BROWSER_RDP_AD_HOSTNAME_ATTR = "extensionAttribute1"
 $env:CF_IDP_ID = "your-idp-id"
@@ -260,18 +276,23 @@ For each user in the AD OU, the script creates:
 - **Network**: `{resolved-ip}/32`
 - **Comment**: `Browser RDP for {email}`
 
-### 2. Infrastructure Target
-- **Hostname**: Value from AD custom attribute
+### 2. DNS CNAME Record
+- **Name**: `{samaccountname}-rdp.{zonename}` (e.g., `jsmith-rdp.example.com`)
+- **Target**: `{tunnel-id}.cfargotunnel.com`
+- **Proxied**: Yes
+
+### 3. Infrastructure Target
+- **Hostname**: Value from AD custom attribute (internal RDP host)
 - **IP Address**: Resolved from hostname
 
-### 3. Access Application
+### 4. Access Application
 - **Name**: `{email} - My PC - Browser RDP`
 - **Type**: Self-Hosted
-- **Domain**: `{email-prefix}-rdp.{browser-rdp-hostname}`
+- **Domain**: `{samaccountname}-rdp.{zonename}` (the DNS record created above)
 - **Browser Rendering**: RDP protocol on port 3389
 - **App Launcher**: Visible (enabled)
 
-### 4. Access Policy
+### 5. Access Policy
 - **Name**: `{email} - Browser RDP Policy`
 - **Decision**: Allow
 - **Include Rule**: Email equals user's email address

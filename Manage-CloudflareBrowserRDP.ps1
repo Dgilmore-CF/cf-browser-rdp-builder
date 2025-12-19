@@ -34,9 +34,9 @@
     The Cloudflare Tunnel ID for adding CIDR routes.
     Can also be set via environment variable: CF_TUNNEL_ID
 
-.PARAMETER BrowserRDPHostname
-    The public hostname for Browser-Based RDP (e.g., rdp.example.com).
-    Can also be set via environment variable: CF_BROWSER_RDP_HOSTNAME
+.PARAMETER CloudflareZoneId
+    The Cloudflare Zone ID where DNS records will be created.
+    Can also be set via environment variable: CF_ZONE_ID
 
 .PARAMETER IdentityProviderId
     The Cloudflare Identity Provider ID to use for policies.
@@ -82,7 +82,7 @@ param(
     [string]$CloudflareTunnelId,
 
     [Parameter()]
-    [string]$BrowserRDPHostname,
+    [string]$CloudflareZoneId,
 
     [Parameter()]
     [string]$IdentityProviderId,
@@ -245,7 +245,11 @@ function Initialize-Parameters {
         
         CloudflareTunnelId = $CloudflareTunnelId
         
+        CloudflareZoneId = $CloudflareZoneId
+        
         IdentityProviderId = $IdentityProviderId
+        
+        ZoneName = $null
         
         LogPath = if ([string]::IsNullOrEmpty($LogPath)) { 
             [Environment]::GetEnvironmentVariable("CF_BROWSER_RDP_LOG_PATH") 
@@ -254,30 +258,10 @@ function Initialize-Parameters {
         }
     }
     
-    # Browser RDP Hostname - special handling with confirmation
-    $existingHostname = Get-ParameterValue `
-        -ParamValue $BrowserRDPHostname `
-        -EnvVarName "CF_BROWSER_RDP_HOSTNAME" `
-        -PromptMessage "" `
-        -Required:$false
-    
-    if ([string]::IsNullOrEmpty($existingHostname)) {
-        $hasHostname = Read-Host "Do you already have a Browser Based RDP hostname configured on Cloudflare? (Y/N)"
-        if ($hasHostname -eq 'Y' -or $hasHostname -eq 'y') {
-            $script:Config.BrowserRDPHostname = Read-Host "Enter the Browser Based RDP hostname (e.g., rdp.example.com)"
-        } else {
-            throw "A Browser Based RDP hostname is required. Please configure one in Cloudflare first."
-        }
-    } else {
-        $script:Config.BrowserRDPHostname = $existingHostname
-    }
-    
     Write-Log "Parameters initialized successfully" -Level "SUCCESS"
     Write-Log "AD OU: $($script:Config.ADOrganizationalUnit)" -Level "DEBUG"
     Write-Log "AD Hostname Attribute: $($script:Config.ADHostnameAttribute)" -Level "DEBUG"
     Write-Log "Cloudflare Account ID: $($script:Config.CloudflareAccountId)" -Level "DEBUG"
-    Write-Log "Cloudflare Tunnel ID: $($script:Config.CloudflareTunnelId)" -Level "DEBUG"
-    Write-Log "Browser RDP Hostname: $($script:Config.BrowserRDPHostname)" -Level "DEBUG"
 }
 
 #endregion
@@ -465,6 +449,183 @@ function Select-IdentityProvider {
     return $selectedIdp.id
 }
 
+function Get-CloudflareZones {
+    Write-Log "Retrieving Cloudflare Zones..." -Level "INFO"
+    
+    $response = Invoke-CloudflareApi -Endpoint "/zones"
+    
+    if ($response.result) {
+        Write-Log "Found $($response.result.Count) zone(s)" -Level "INFO"
+        return $response.result
+    }
+    
+    return @()
+}
+
+function Select-CloudflareZone {
+    # Check if already specified via parameter
+    if (-not [string]::IsNullOrEmpty($script:Config.CloudflareZoneId)) {
+        Write-Log "Using pre-configured Zone ID: $($script:Config.CloudflareZoneId)" -Level "INFO"
+        # Get zone name for the pre-configured zone
+        $zones = Get-CloudflareZones
+        $zone = $zones | Where-Object { $_.id -eq $script:Config.CloudflareZoneId }
+        if ($zone) {
+            $script:Config.ZoneName = $zone.name
+            Write-Log "Zone Name: $($zone.name)" -Level "DEBUG"
+        }
+        return $script:Config.CloudflareZoneId
+    }
+    
+    # Check environment variable
+    $envZoneId = [Environment]::GetEnvironmentVariable("CF_ZONE_ID")
+    if (-not [string]::IsNullOrEmpty($envZoneId)) {
+        $script:Config.CloudflareZoneId = $envZoneId
+        Write-Log "Using Zone ID from environment variable: $envZoneId" -Level "INFO"
+        # Get zone name
+        $zones = Get-CloudflareZones
+        $zone = $zones | Where-Object { $_.id -eq $envZoneId }
+        if ($zone) {
+            $script:Config.ZoneName = $zone.name
+        }
+        return $envZoneId
+    }
+    
+    # Interactive selection
+    $zones = Get-CloudflareZones
+    
+    if ($zones.Count -eq 0) {
+        throw "No Cloudflare Zones found accessible by this API token"
+    }
+    
+    Write-Host "`nAvailable Cloudflare Zones:" -ForegroundColor Cyan
+    for ($i = 0; $i -lt $zones.Count; $i++) {
+        Write-Host "  [$($i + 1)] $($zones[$i].name) (ID: $($zones[$i].id))"
+    }
+    
+    do {
+        $selection = Read-Host "`nSelect Cloudflare Zone for DNS records (1-$($zones.Count))"
+        $index = [int]$selection - 1
+    } while ($index -lt 0 -or $index -ge $zones.Count)
+    
+    $selectedZone = $zones[$index]
+    $script:Config.CloudflareZoneId = $selectedZone.id
+    $script:Config.ZoneName = $selectedZone.name
+    Write-Log "Selected Zone: $($selectedZone.name) ($($selectedZone.id))" -Level "SUCCESS"
+    
+    return $selectedZone.id
+}
+
+function Get-CloudflareDnsRecords {
+    param(
+        [Parameter()]
+        [string]$Name
+    )
+    
+    $endpoint = "/zones/$($script:Config.CloudflareZoneId)/dns_records"
+    if (-not [string]::IsNullOrEmpty($Name)) {
+        $endpoint += "?name=$Name"
+    }
+    
+    $response = Invoke-CloudflareApi -Endpoint $endpoint
+    
+    if ($response.result) {
+        return $response.result
+    }
+    
+    return @()
+}
+
+function New-CloudflareDnsRecord {
+    param(
+        [Parameter(Mandatory)]
+        [string]$SamAccountName,
+        
+        [Parameter(Mandatory)]
+        [string]$TunnelId
+    )
+    
+    # Build the DNS hostname: {samaccountname}-rdp.{zonename}
+    $dnsName = "$($SamAccountName.ToLower())-rdp.$($script:Config.ZoneName)"
+    
+    Write-Log "Creating DNS record: $dnsName..." -Level "INFO"
+    
+    # Check if DNS record already exists
+    $existingRecords = Get-CloudflareDnsRecords -Name $dnsName
+    if ($existingRecords.Count -gt 0) {
+        Write-Log "DNS record $dnsName already exists" -Level "WARN"
+        return @{
+            name = $dnsName
+            id = $existingRecords[0].id
+            existing = $true
+        }
+    }
+    
+    if ($DryRun) {
+        Write-Log "[DRY RUN] Would create DNS CNAME record: $dnsName" -Level "INFO"
+        return @{
+            name = $dnsName
+            id = "dry-run-dns-id"
+            existing = $false
+        }
+    }
+    
+    # Create CNAME record pointing to the tunnel
+    $tunnelHostname = "$TunnelId.cfargotunnel.com"
+    
+    $body = @{
+        type    = "CNAME"
+        name    = $dnsName
+        content = $tunnelHostname
+        proxied = $true
+        ttl     = 1
+    }
+    
+    $response = Invoke-CloudflareApi -Endpoint "/zones/$($script:Config.CloudflareZoneId)/dns_records" -Method "POST" -Body $body
+    
+    if ($response.result) {
+        Write-Log "Successfully created DNS record: $dnsName -> $tunnelHostname" -Level "SUCCESS"
+        return @{
+            name = $dnsName
+            id = $response.result.id
+            existing = $false
+        }
+    }
+    
+    throw "Failed to create DNS record: $dnsName"
+}
+
+function Remove-CloudflareDnsRecord {
+    param(
+        [Parameter(Mandatory)]
+        [string]$DnsName
+    )
+    
+    Write-Log "Removing DNS record: $DnsName..." -Level "INFO"
+    
+    # Find the record
+    $records = Get-CloudflareDnsRecords -Name $DnsName
+    
+    if ($records.Count -eq 0) {
+        Write-Log "DNS record $DnsName not found - nothing to remove" -Level "WARN"
+        return $true
+    }
+    
+    if ($DryRun) {
+        Write-Log "[DRY RUN] Would remove DNS record: $DnsName" -Level "INFO"
+        return $true
+    }
+    
+    $recordId = $records[0].id
+    $response = Invoke-CloudflareApi -Endpoint "/zones/$($script:Config.CloudflareZoneId)/dns_records/$recordId" -Method "DELETE"
+    
+    if ($response.success) {
+        Write-Log "Successfully removed DNS record: $DnsName" -Level "SUCCESS"
+        return $true
+    }
+    
+    return $false
+}
+
 function Get-CloudflareTunnelRoutes {
     Write-Log "Retrieving existing tunnel routes..." -Level "INFO"
     
@@ -594,7 +755,7 @@ function New-CloudflareAccessApplication {
         [string]$Name,
         
         [Parameter(Mandatory)]
-        [string]$Email,
+        [string]$PublicHostname,
         
         [Parameter(Mandatory)]
         [string]$TargetHostname,
@@ -604,6 +765,7 @@ function New-CloudflareAccessApplication {
     )
     
     Write-Log "Creating Access Application: $Name..." -Level "INFO"
+    Write-Log "Public Hostname: $PublicHostname" -Level "DEBUG"
     
     # Check if application already exists
     $existingApps = Get-CloudflareAccessApplications
@@ -615,18 +777,14 @@ function New-CloudflareAccessApplication {
     }
     
     if ($DryRun) {
-        Write-Log "[DRY RUN] Would create Access Application: $Name" -Level "INFO"
+        Write-Log "[DRY RUN] Would create Access Application: $Name with domain $PublicHostname" -Level "INFO"
         return @{ id = "dry-run-app-id"; name = $Name }
     }
-    
-    # Build the subdomain from email
-    $emailPrefix = $Email.Split('@')[0] -replace '[^a-zA-Z0-9]', '-'
-    $publicHostname = "$emailPrefix-rdp.$($script:Config.BrowserRDPHostname)"
     
     $body = @{
         name                       = $Name
         type                       = "self_hosted"
-        domain                     = $publicHostname
+        domain                     = $PublicHostname
         session_duration           = "24h"
         auto_redirect_to_identity  = $false
         app_launcher_visible       = $true
@@ -661,7 +819,7 @@ function New-CloudflareAccessApplication {
         $updateBody = @{
             name                      = $Name
             type                      = "self_hosted"
-            domain                    = $publicHostname
+            domain                    = $PublicHostname
             session_duration          = "24h"
             app_launcher_visible      = $true
             auto_redirect_to_identity = $false
@@ -990,7 +1148,7 @@ function Sync-BrowserRDPApplications {
         foreach ($user in $usersToCreate) {
             try {
                 Write-Log "-" * 40 -NoTimestamp
-                Write-Log "Processing user: $($user.Email)" -Level "INFO"
+                Write-Log "Processing user: $($user.Email) (SamAccountName: $($user.SamAccountName))" -Level "INFO"
                 
                 # Resolve hostname to IP
                 $ipAddress = Resolve-HostnameToIP -Hostname $user.RDPHostname
@@ -998,14 +1156,18 @@ function Sync-BrowserRDPApplications {
                 # Add tunnel route
                 Add-CloudflareTunnelRoute -IPAddress $ipAddress -Comment "Browser RDP for $($user.Email)"
                 
+                # Create DNS record using samAccountName: {samaccountname}-rdp.{zone}
+                $dnsRecord = New-CloudflareDnsRecord -SamAccountName $user.SamAccountName -TunnelId $script:Config.CloudflareTunnelId
+                $publicHostname = $dnsRecord.name
+                
                 # Create Access Target
                 $target = New-CloudflareAccessTarget -Hostname $user.RDPHostname -IPAddress $ipAddress
                 
-                # Create Access Application
+                # Create Access Application with the DNS hostname we just created
                 $appName = Get-ExpectedAppName -Email $user.Email
                 $app = New-CloudflareAccessApplication `
                     -Name $appName `
-                    -Email $user.Email `
+                    -PublicHostname $publicHostname `
                     -TargetHostname $user.RDPHostname `
                     -TargetId $target.id
                 
@@ -1013,7 +1175,7 @@ function Sync-BrowserRDPApplications {
                 $policyName = Get-ExpectedPolicyName -Email $user.Email
                 New-CloudflareAccessPolicy -AppId $app.id -PolicyName $policyName -Email $user.Email
                 
-                Write-Log "Successfully configured Browser RDP for $($user.Email)" -Level "SUCCESS"
+                Write-Log "Successfully configured Browser RDP for $($user.Email) at $publicHostname" -Level "SUCCESS"
             }
             catch {
                 Write-Log "Failed to configure Browser RDP for $($user.Email): $($_.Exception.Message)" -Level "ERROR"
@@ -1029,11 +1191,18 @@ function Sync-BrowserRDPApplications {
             Write-Host "`n" -NoNewline
             Write-Host "User '$($removal.Email)' is no longer in the AD OU." -ForegroundColor Yellow
             Write-Host "Application: $($removal.App.name)" -ForegroundColor Yellow
+            Write-Host "Domain: $($removal.App.domain)" -ForegroundColor Yellow
             
-            $confirm = Read-Host "Do you want to DELETE this Browser RDP application? (Y/N)"
+            $confirm = Read-Host "Do you want to DELETE this Browser RDP application and its DNS record? (Y/N)"
             
             if ($confirm -eq 'Y' -or $confirm -eq 'y') {
                 try {
+                    # Remove DNS record first
+                    if ($removal.App.domain) {
+                        Remove-CloudflareDnsRecord -DnsName $removal.App.domain
+                    }
+                    
+                    # Remove Access Application
                     Remove-CloudflareAccessApplication -AppId $removal.App.id -AppName $removal.App.name
                     Write-Log "Removed Browser RDP application for $($removal.Email)" -Level "SUCCESS"
                 }
@@ -1084,6 +1253,9 @@ function Main {
         
         # Select Cloudflare Tunnel if not specified
         Select-CloudflareTunnel
+        
+        # Select Cloudflare Zone for DNS records
+        Select-CloudflareZone
         
         # Select Identity Provider if not specified
         Select-IdentityProvider
