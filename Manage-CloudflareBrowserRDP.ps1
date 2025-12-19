@@ -330,9 +330,10 @@ function Test-CloudflareConnection {
     Write-Log "Testing Cloudflare API connection..." -Level "INFO"
     
     try {
-        $result = Invoke-CloudflareApi -Endpoint "/user/tokens/verify"
+        # Use account endpoint to verify - works with both User and Account API tokens
+        $result = Invoke-CloudflareApi -Endpoint "/accounts/$($script:Config.CloudflareAccountId)"
         if ($result.success) {
-            Write-Log "Cloudflare API connection successful" -Level "SUCCESS"
+            Write-Log "Cloudflare API connection successful (Account: $($result.result.name))" -Level "SUCCESS"
             return $true
         }
     }
