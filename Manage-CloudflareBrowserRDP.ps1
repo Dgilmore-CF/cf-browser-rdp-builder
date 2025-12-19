@@ -767,12 +767,12 @@ function New-CloudflareAccessApplication {
     Write-Log "Creating Access Application: $Name..." -Level "INFO"
     Write-Log "Public Hostname: $PublicHostname" -Level "DEBUG"
     
-    # Check if application already exists
-    $existingApps = Get-CloudflareAccessApplications
-    $existingApp = $existingApps | Where-Object { $_.name -eq $Name }
+    # Check if application already exists (by name or domain)
+    $existingApps = @(Get-CloudflareAccessApplications)
+    $existingApp = $existingApps | Where-Object { $_.name -eq $Name -or $_.domain -eq $PublicHostname }
     
     if ($existingApp) {
-        Write-Log "Access Application '$Name' already exists" -Level "WARN"
+        Write-Log "Access Application already exists (Name: $($existingApp.name), Domain: $($existingApp.domain))" -Level "WARN"
         return $existingApp
     }
     
