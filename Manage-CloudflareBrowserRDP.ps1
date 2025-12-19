@@ -800,31 +800,10 @@ function New-CloudflareAccessApplication {
     if ($response.result) {
         Write-Log "Successfully created Access Application: $Name" -Level "SUCCESS"
         
-        # Update app with browser rendering settings
-        $appId = $response.result.id
-        $updateBody = @{
-            name                      = $Name
-            type                      = "self_hosted"
-            domain                    = $PublicHostname
-            session_duration          = "24h"
-            app_launcher_visible      = $true
-            auto_redirect_to_identity = $false
-            
-            # Browser RDP rendering configuration
-            target_criteria = @(
-                @{
-                    target_attributes = @(
-                        @{
-                            name   = "hostname"
-                            values = @($TargetHostname)
-                        }
-                    )
-                    port = 3389
-                }
-            )
-        }
-        
-        $updateResponse = Invoke-CloudflareApi -Endpoint "/accounts/$($script:Config.CloudflareAccountId)/access/apps/$appId" -Method "PUT" -Body $updateBody
+        # Note: Browser rendering settings (RDP protocol, target criteria) must be configured
+        # manually in the Cloudflare dashboard or via a separate API call with the correct format.
+        # The API format for browser_rendering is not well documented.
+        Write-Log "Note: Configure Browser Rendering settings for RDP in Cloudflare dashboard" -Level "WARN"
         
         return $response.result
     }
