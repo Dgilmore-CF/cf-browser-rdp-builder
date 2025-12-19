@@ -2,7 +2,7 @@
 
 ## Overview
 
-This PowerShell script automates the management of Cloudflare Browser-Based RDP Access Applications synced with Active Directory OU membership. It creates, updates, and removes Cloudflare Access applications based on users present in a specified AD OU.
+This PowerShell script automates the management of Cloudflare Browser-Based RDP Access Applications synced with Active Directory group membership. It creates, updates, and removes Cloudflare Access applications based on users present in a specified AD security group.
 
 ---
 
@@ -38,7 +38,7 @@ The account running this script needs the following AD permissions:
 
 | Permission | Scope | Purpose |
 |------------|-------|---------|
-| **Read** | Target OU and descendant user objects | Query user accounts |
+| **Read** | Target AD group and member user objects | Query group membership and user accounts |
 | **Read Property: mail** | User objects | Retrieve email addresses |
 | **Read Property: userPrincipalName** | User objects | Fallback email source |
 | **Read Property: [Custom Attribute]** | User objects | Retrieve RDP hostname |
@@ -46,8 +46,9 @@ The account running this script needs the following AD permissions:
 ### Recommended AD Setup
 
 1. **Create a dedicated service account** for running this script
-2. **Delegate read permissions** to the specific OU containing RDP users
-3. **Use a Group Managed Service Account (gMSA)** for enhanced security in scheduled task scenarios
+2. **Create a security group** (e.g., `RDP-Browser-Users`) to contain users who need Browser RDP access
+3. **Delegate read permissions** to the security group and its members
+4. **Use a Group Managed Service Account (gMSA)** for enhanced security in scheduled task scenarios
 
 ### Custom Attribute Configuration
 
@@ -144,7 +145,7 @@ TTL (Optional):
 - **Read** zone details to get zone name for DNS record creation
 
 #### DNS (Edit)
-- **Create** CNAME DNS records in format `{samaccountname}-rdp.{zonename}`
+- **Create** A DNS records in format `{samaccountname}-rdp.{zonename}`
 - **List** existing DNS records to avoid duplicates
 - **Delete** DNS records when applications are removed
 
@@ -161,7 +162,7 @@ The script supports configuration via environment variables for automation scena
 | `CF_TUNNEL_ID` | Cloudflare Tunnel ID | `12345678-abcd-...` |
 | `CF_ZONE_ID` | Cloudflare Zone ID for DNS records | `12345678-abcd-...` |
 | `CF_IDP_ID` | Identity Provider ID | `12345678-abcd-...` |
-| `CF_BROWSER_RDP_AD_OU` | AD OU Distinguished Name | `OU=RDPUsers,DC=contoso,DC=com` |
+| `CF_BROWSER_RDP_AD_GROUP` | AD Group name | `RDP-Browser-Users` |
 | `CF_BROWSER_RDP_AD_HOSTNAME_ATTR` | AD attribute for RDP hostname | `extensionAttribute1` |
 | `CF_BROWSER_RDP_LOG_PATH` | Log file directory | `C:\Logs\BrowserRDP` |
 
@@ -230,7 +231,7 @@ The script will prompt for all required values.
 ### Command Line Parameters
 ```powershell
 .\Manage-CloudflareBrowserRDP.ps1 `
-    -ADOrganizationalUnit "OU=RDPUsers,DC=contoso,DC=com" `
+    -ADGroup "RDP-Browser-Users" `
     -ADHostnameAttribute "extensionAttribute1" `
     -CloudflareAccountId "your-account-id" `
     -CloudflareApiToken "your-api-token" `
@@ -246,7 +247,7 @@ $env:CF_ACCOUNT_ID = "your-account-id"
 $env:CF_API_TOKEN = "your-api-token"
 $env:CF_TUNNEL_ID = "your-tunnel-id"
 $env:CF_ZONE_ID = "your-zone-id"
-$env:CF_BROWSER_RDP_AD_OU = "OU=RDPUsers,DC=contoso,DC=com"
+$env:CF_BROWSER_RDP_AD_GROUP = "RDP-Browser-Users"
 $env:CF_BROWSER_RDP_AD_HOSTNAME_ATTR = "extensionAttribute1"
 $env:CF_IDP_ID = "your-idp-id"
 
@@ -264,7 +265,7 @@ Shows what would be created/deleted without making changes.
 
 ## What the Script Creates
 
-For each user in the AD OU, the script creates:
+For each user in the AD group, the script creates:
 
 ### 1. Tunnel CIDR Route
 - **Network**: `{resolved-ip}/32`

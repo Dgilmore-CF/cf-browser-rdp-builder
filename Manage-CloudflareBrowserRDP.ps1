@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    Manages Cloudflare Browser-Based RDP Access Applications synced with Active Directory OU membership.
+    Manages Cloudflare Browser-Based RDP Access Applications synced with Active Directory group membership.
 
 .DESCRIPTION
-    This script queries a specified Active Directory OU to retrieve user accounts with their email addresses
+    This script queries a specified Active Directory group to retrieve user accounts with their email addresses
     and a custom attribute containing RDP hostnames. It then creates/manages Cloudflare Access applications
     for Browser-Based RDP access, including:
     - Adding /32 CIDR entries to Cloudflare Tunnel
@@ -14,9 +14,9 @@
     The script supports incremental sync - only creating apps for new users and prompting for deletion
     of apps for removed users.
 
-.PARAMETER ADOrganizationalUnit
-    The Distinguished Name of the Active Directory OU to query.
-    Can also be set via environment variable: CF_BROWSER_RDP_AD_OU
+.PARAMETER ADGroup
+    The name or Distinguished Name of the Active Directory group to query.
+    Can also be set via environment variable: CF_BROWSER_RDP_AD_GROUP
 
 .PARAMETER ADHostnameAttribute
     The AD attribute containing the RDP hostname for each user.
@@ -50,7 +50,7 @@
     If specified, shows what would be done without making changes.
 
 .EXAMPLE
-    .\Manage-CloudflareBrowserRDP.ps1 -ADOrganizationalUnit "OU=RDPUsers,DC=contoso,DC=com" -ADHostnameAttribute "extensionAttribute1"
+    .\Manage-CloudflareBrowserRDP.ps1 -ADGroup "RDP-Users" -ADHostnameAttribute "extensionAttribute1"
 
 .EXAMPLE
     .\Manage-CloudflareBrowserRDP.ps1 -DryRun
@@ -67,7 +67,7 @@
 [CmdletBinding()]
 param(
     [Parameter()]
-    [string]$ADOrganizationalUnit,
+    [string]$ADGroup,
 
     [Parameter()]
     [string]$ADHostnameAttribute,
@@ -218,10 +218,10 @@ function Initialize-Parameters {
     Write-Log "Initializing parameters..." -Level "INFO"
     
     $script:Config = @{
-        ADOrganizationalUnit = Get-ParameterValue `
-            -ParamValue $ADOrganizationalUnit `
-            -EnvVarName "CF_BROWSER_RDP_AD_OU" `
-            -PromptMessage "Enter Active Directory OU Distinguished Name (e.g., OU=RDPUsers,DC=contoso,DC=com)" `
+        ADGroup = Get-ParameterValue `
+            -ParamValue $ADGroup `
+            -EnvVarName "CF_BROWSER_RDP_AD_GROUP" `
+            -PromptMessage "Enter Active Directory Group name (e.g., RDP-Users)" `
             -Required
         
         ADHostnameAttribute = Get-ParameterValue `
@@ -259,7 +259,7 @@ function Initialize-Parameters {
     }
     
     Write-Log "Parameters initialized successfully" -Level "SUCCESS"
-    Write-Log "AD OU: $($script:Config.ADOrganizationalUnit)" -Level "DEBUG"
+    Write-Log "AD Group: $($script:Config.ADGroup)" -Level "DEBUG"
     Write-Log "AD Hostname Attribute: $($script:Config.ADHostnameAttribute)" -Level "DEBUG"
     Write-Log "Cloudflare Account ID: $($script:Config.CloudflareAccountId)" -Level "DEBUG"
 }
@@ -970,8 +970,8 @@ function Test-ADConnection {
     }
 }
 
-function Get-ADUsersFromOU {
-    Write-Log "Querying Active Directory OU: $($script:Config.ADOrganizationalUnit)..." -Level "INFO"
+function Get-ADUsersFromGroup {
+    Write-Log "Querying Active Directory Group: $($script:Config.ADGroup)..." -Level "INFO"
     
     try {
         $properties = @(
@@ -984,15 +984,23 @@ function Get-ADUsersFromOU {
             "Enabled"
         )
         
-        $users = Get-ADUser -SearchBase $script:Config.ADOrganizationalUnit `
-            -Filter { Enabled -eq $true } `
-            -Properties $properties `
-            -ErrorAction Stop
+        # Get members of the AD group
+        $groupMembers = Get-ADGroupMember -Identity $script:Config.ADGroup -ErrorAction Stop | 
+            Where-Object { $_.objectClass -eq 'user' }
         
-        Write-Log "Found $($users.Count) enabled user(s) in OU" -Level "INFO"
+        Write-Log "Found $($groupMembers.Count) user member(s) in group" -Level "INFO"
         
         $validUsers = @()
-        foreach ($user in $users) {
+        foreach ($member in $groupMembers) {
+            # Get full user details
+            $user = Get-ADUser -Identity $member.SamAccountName -Properties $properties -ErrorAction Stop
+            
+            # Skip disabled users
+            if (-not $user.Enabled) {
+                Write-Log "Skipping user $($user.SamAccountName): Account is disabled" -Level "WARN"
+                continue
+            }
+            
             # Get email - try multiple attributes
             $email = $user.mail
             if ([string]::IsNullOrEmpty($email)) {
@@ -1029,7 +1037,7 @@ function Get-ADUsersFromOU {
         return $validUsers
     }
     catch {
-        Write-Log "Failed to query AD OU: $($_.Exception.Message)" -Level "ERROR"
+        Write-Log "Failed to query AD Group: $($_.Exception.Message)" -Level "ERROR"
         throw
     }
 }
@@ -1081,7 +1089,7 @@ function Sync-BrowserRDPApplications {
     Write-Log "Starting Browser RDP Application sync..." -Level "INFO"
     
     # Get current AD users
-    $adUsers = Get-ADUsersFromOU
+    $adUsers = Get-ADUsersFromGroup
     
     # Get current Cloudflare Access Applications
     $existingApps = Get-CloudflareAccessApplications
