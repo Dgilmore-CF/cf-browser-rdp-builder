@@ -205,17 +205,11 @@ cloudflared tunnel create browser-rdp-tunnel
 - Tunnel must be in a running state
 - Tunnel must be associated with your Cloudflare account
 - Note the Tunnel ID (UUID format)
+- The script will automatically add /32 CIDR routes for each user's RDP host IP
 
-### 2. Browser-Based RDP Hostname
+**Note:** You do NOT need to configure a Public Hostname on the tunnel for Browser-Based RDP. The script creates DNS A records and adds CIDR routes - Cloudflare handles the routing through the Access Application and Infrastructure Targets.
 
-Configure a public hostname for Browser RDP access:
-
-1. In Cloudflare Dashboard, go to **Zero Trust** → **Networks** → **Tunnels**
-2. Select your tunnel → **Public Hostname** tab
-3. Add a hostname like `rdp.yourdomain.com`
-4. Configure the service as needed for browser isolation
-
-### 3. Identity Provider
+### 2. Identity Provider
 
 At least one Identity Provider must be configured:
 
