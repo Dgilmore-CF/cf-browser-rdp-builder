@@ -182,14 +182,14 @@ function Get-ParameterValue {
     # Priority 1: Command line parameter
     if (-not [string]::IsNullOrEmpty($ParamValue)) {
         Write-Log "Using command line value for $PromptMessage" -Level "DEBUG"
-        return $ParamValue
+        return $ParamValue.Trim()
     }
     
     # Priority 2: Environment variable
     $envValue = [Environment]::GetEnvironmentVariable($EnvVarName)
     if (-not [string]::IsNullOrEmpty($envValue)) {
         Write-Log "Using environment variable $EnvVarName for $PromptMessage" -Level "DEBUG"
-        return $envValue
+        return $envValue.Trim()
     }
     
     # Priority 3: Interactive prompt
@@ -198,12 +198,14 @@ function Get-ParameterValue {
             $secureValue = Read-Host -Prompt $PromptMessage -AsSecureString
             $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
             try {
-                return [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+                $plainText = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+                return $plainText.Trim()
             } finally {
                 [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
             }
         } else {
-            return Read-Host -Prompt $PromptMessage
+            $value = Read-Host -Prompt $PromptMessage
+            return $value.Trim()
         }
     }
     
