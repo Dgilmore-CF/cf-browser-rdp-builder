@@ -82,9 +82,8 @@ Configure the following permissions for your API token:
 
 | Permission Category | Permission | Access Level | Purpose |
 |---------------------|------------|--------------|---------|
-| **Account** | Access: Apps and Policies | Edit | Create/modify/delete Access Applications and Policies |
+| **Account** | Access: Apps and Policies | Edit | Create/modify/delete Access Applications, Policies, and Infrastructure Targets |
 | **Account** | Access: Organizations, Identity Providers, and Groups | Read | List Identity Providers for interactive selection |
-| **Account** | Access: Infrastructure Targets | Edit | Create/modify Access Targets |
 | **Account** | Cloudflare Tunnel | Read | List available tunnels for interactive selection |
 | **Account** | Cloudflare Tunnel | Edit | Add CIDR routes to tunnel configuration |
 | **Account** | Account Settings | Read | Verify account access |
@@ -98,7 +97,6 @@ Token Name: Browser RDP Management Script
 Permissions:
   Account - Access: Apps and Policies - Edit
   Account - Access: Organizations, Identity Providers, and Groups - Read  
-  Account - Access: Infrastructure Targets - Edit
   Account - Cloudflare Tunnel - Read
   Account - Cloudflare Tunnel - Edit
   Account - Account Settings - Read
@@ -121,19 +119,15 @@ TTL (Optional):
 ### Token Permission Details
 
 #### Access: Apps and Policies (Edit)
-- **Create** self-hosted Access Applications
+- **Create** self-hosted Access Applications (including Infrastructure type)
 - **Update** application settings (browser rendering, target criteria)
 - **Delete** applications for removed users
 - **Create/Read/Delete** Access Policies
+- **Create/Read/Delete** Infrastructure Targets (managed via Access Apps API)
 
 #### Access: Organizations, Identity Providers, and Groups (Read)
 - **List** configured Identity Providers
 - **Read** IdP configuration for policy creation
-
-#### Access: Infrastructure Targets (Edit)
-- **Create** infrastructure targets (hostname + IP mappings)
-- **List** existing targets to avoid duplicates
-- **Delete** targets when applications are removed
 
 #### Cloudflare Tunnel (Edit)
 - **Add** CIDR routes (/32) to tunnel configuration
