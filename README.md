@@ -276,9 +276,9 @@ For each user in the AD OU, the script creates:
 - **Network**: `{resolved-ip}/32`
 - **Comment**: `Browser RDP for {email}`
 
-### 2. DNS CNAME Record
+### 2. DNS A Record
 - **Name**: `{samaccountname}-rdp.{zonename}` (e.g., `jsmith-rdp.example.com`)
-- **Target**: `{tunnel-id}.cfargotunnel.com`
+- **Target**: `240.0.0.0`
 - **Proxied**: Yes
 
 ### 3. Infrastructure Target

@@ -538,10 +538,7 @@ function Get-CloudflareDnsRecords {
 function New-CloudflareDnsRecord {
     param(
         [Parameter(Mandatory)]
-        [string]$SamAccountName,
-        
-        [Parameter(Mandatory)]
-        [string]$TunnelId
+        [string]$SamAccountName
     )
     
     # Build the DNS hostname: {samaccountname}-rdp.{zonename}
@@ -561,7 +558,7 @@ function New-CloudflareDnsRecord {
     }
     
     if ($DryRun) {
-        Write-Log "[DRY RUN] Would create DNS CNAME record: $dnsName" -Level "INFO"
+        Write-Log "[DRY RUN] Would create DNS A record: $dnsName -> 240.0.0.0" -Level "INFO"
         return @{
             name = $dnsName
             id = "dry-run-dns-id"
@@ -569,13 +566,11 @@ function New-CloudflareDnsRecord {
         }
     }
     
-    # Create CNAME record pointing to the tunnel
-    $tunnelHostname = "$TunnelId.cfargotunnel.com"
-    
+    # Create A record pointing to 240.0.0.0 (Cloudflare proxy will handle routing)
     $body = @{
-        type    = "CNAME"
+        type    = "A"
         name    = $dnsName
-        content = $tunnelHostname
+        content = "240.0.0.0"
         proxied = $true
         ttl     = 1
     }
@@ -583,7 +578,7 @@ function New-CloudflareDnsRecord {
     $response = Invoke-CloudflareApi -Endpoint "/zones/$($script:Config.CloudflareZoneId)/dns_records" -Method "POST" -Body $body
     
     if ($response.result) {
-        Write-Log "Successfully created DNS record: $dnsName -> $tunnelHostname" -Level "SUCCESS"
+        Write-Log "Successfully created DNS record: $dnsName -> 240.0.0.0" -Level "SUCCESS"
         return @{
             name = $dnsName
             id = $response.result.id
@@ -1157,7 +1152,7 @@ function Sync-BrowserRDPApplications {
                 Add-CloudflareTunnelRoute -IPAddress $ipAddress -Comment "Browser RDP for $($user.Email)"
                 
                 # Create DNS record using samAccountName: {samaccountname}-rdp.{zone}
-                $dnsRecord = New-CloudflareDnsRecord -SamAccountName $user.SamAccountName -TunnelId $script:Config.CloudflareTunnelId
+                $dnsRecord = New-CloudflareDnsRecord -SamAccountName $user.SamAccountName
                 $publicHostname = $dnsRecord.name
                 
                 # Create Access Target
