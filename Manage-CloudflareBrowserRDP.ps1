@@ -552,8 +552,8 @@ function New-CloudflareDnsRecord {
     Write-Log "Creating DNS record: $dnsName..." -Level "INFO"
     
     # Check if DNS record already exists
-    $existingRecords = Get-CloudflareDnsRecords -Name $dnsName
-    if ($existingRecords.Count -gt 0) {
+    $existingRecords = @(Get-CloudflareDnsRecords -Name $dnsName)
+    if ($existingRecords.Count -gt 0 -and $null -ne $existingRecords[0]) {
         Write-Log "DNS record $dnsName already exists" -Level "WARN"
         return @{
             name = $dnsName
