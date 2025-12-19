@@ -721,16 +721,17 @@ function New-CloudflareAccessTarget {
         hostname = $Hostname
         ip       = @{
             ipv4 = @{
-                ip_addr            = $IPAddress
-                virtual_network_id = $null
+                ip_addr = $IPAddress
             }
         }
     }
     
+    Write-Log "Creating target with body: $(ConvertTo-Json $body -Compress)" -Level "DEBUG"
+    
     $response = Invoke-CloudflareApi -Endpoint "/accounts/$($script:Config.CloudflareAccountId)/infrastructure/targets" -Method "POST" -Body $body
     
     if ($response.result) {
-        Write-Log "Successfully created Access Target for $Hostname" -Level "SUCCESS"
+        Write-Log "Successfully created Access Target for $Hostname (ID: $($response.result.id))" -Level "SUCCESS"
         return $response.result
     }
     
@@ -785,7 +786,7 @@ function New-CloudflareAccessApplication {
         return @{ id = "dry-run-app-id"; name = $Name }
     }
     
-    # Create basic self-hosted app first
+    # Create self-hosted app with private destination for RDP
     $body = @{
         name                       = $Name
         type                       = "self_hosted"
@@ -793,18 +794,20 @@ function New-CloudflareAccessApplication {
         session_duration           = "24h"
         auto_redirect_to_identity  = $false
         app_launcher_visible       = $true
+        destinations               = @(
+            @{
+                type       = "public"
+                uri        = $PublicHostname
+            }
+        )
     }
+    
+    Write-Log "Creating app with body: $(ConvertTo-Json $body -Depth 5 -Compress)" -Level "DEBUG"
     
     $response = Invoke-CloudflareApi -Endpoint "/accounts/$($script:Config.CloudflareAccountId)/access/apps" -Method "POST" -Body $body
     
     if ($response.result) {
-        Write-Log "Successfully created Access Application: $Name" -Level "SUCCESS"
-        
-        # Note: Browser rendering settings (RDP protocol, target criteria) must be configured
-        # manually in the Cloudflare dashboard or via a separate API call with the correct format.
-        # The API format for browser_rendering is not well documented.
-        Write-Log "Note: Configure Browser Rendering settings for RDP in Cloudflare dashboard" -Level "WARN"
-        
+        Write-Log "Successfully created Access Application: $Name (ID: $($response.result.id))" -Level "SUCCESS"
         return $response.result
     }
     
