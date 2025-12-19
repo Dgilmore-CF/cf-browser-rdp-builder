@@ -818,7 +818,7 @@ function New-CloudflareAccessApplication {
         return @{ id = "dry-run-app-id"; name = $Name }
     }
     
-    # Create self-hosted app with private destination for RDP
+    # Create self-hosted app with browser rendering settings for RDP
     $body = @{
         name                       = $Name
         type                       = "self_hosted"
@@ -826,15 +826,27 @@ function New-CloudflareAccessApplication {
         session_duration           = "24h"
         auto_redirect_to_identity  = $false
         app_launcher_visible       = $true
-        destinations               = @(
+        
+        # Browser rendering settings for RDP
+        browser_rendering = @{
+            type = "rdp"
+        }
+        
+        # Target criteria for RDP - specifies which infrastructure target to connect to
+        target_criteria = @(
             @{
-                type       = "public"
-                uri        = $PublicHostname
+                target_attributes = @(
+                    @{
+                        name   = "hostname"
+                        values = @($TargetHostname)
+                    }
+                )
+                port = 3389
             }
         )
     }
     
-    Write-Log "Creating app with body: $(ConvertTo-Json $body -Depth 5 -Compress)" -Level "DEBUG"
+    Write-Log "Creating app with body: $(ConvertTo-Json $body -Depth 10 -Compress)" -Level "DEBUG"
     
     $response = Invoke-CloudflareApi -Endpoint "/accounts/$($script:Config.CloudflareAccountId)/access/apps" -Method "POST" -Body $body
     
