@@ -527,13 +527,13 @@ function Get-CloudflareDnsRecords {
     
     $endpoint = "/zones/$($script:Config.CloudflareZoneId)/dns_records"
     if (-not [string]::IsNullOrEmpty($Name)) {
-        $encodedName = [System.Web.HttpUtility]::UrlEncode($Name)
-        $endpoint += "?name=$encodedName"
+        $endpoint += "?name=$Name"
     }
     
     $response = Invoke-CloudflareApi -Endpoint $endpoint
     
     if ($response.result) {
+        Write-Log "Found $($response.result.Count) DNS record(s) matching query" -Level "DEBUG"
         return $response.result
     }
     
