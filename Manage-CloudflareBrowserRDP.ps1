@@ -121,10 +121,10 @@ function Initialize-Logging {
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $Script:LogFile = Join-Path $Path "$ScriptName`_$timestamp.log"
     
-    Write-Log "=" * 80 -NoTimestamp
+    Write-Log ("=" * 80) -NoTimestamp
     Write-Log "$ScriptName v$ScriptVersion started" -Level "INFO"
     Write-Log "Log file: $Script:LogFile" -Level "INFO"
-    Write-Log "=" * 80 -NoTimestamp
+    Write-Log ("=" * 80) -NoTimestamp
 }
 
 function Write-Log {
@@ -1137,12 +1137,12 @@ function Sync-BrowserRDPApplications {
     }
     
     # Summary
-    Write-Log "=" * 60 -NoTimestamp
+    Write-Log ("=" * 60) -NoTimestamp
     Write-Log "Sync Summary:" -Level "INFO"
     Write-Log "  Users to create: $($usersToCreate.Count)" -Level "INFO"
     Write-Log "  Users already configured: $($usersToSkip.Count)" -Level "INFO"
     Write-Log "  Apps to potentially remove: $($appsToRemove.Count)" -Level "INFO"
-    Write-Log "=" * 60 -NoTimestamp
+    Write-Log ("=" * 60) -NoTimestamp
     
     # Create new users' Browser RDP apps
     if ($usersToCreate.Count -gt 0) {
@@ -1150,7 +1150,7 @@ function Sync-BrowserRDPApplications {
         
         foreach ($user in $usersToCreate) {
             try {
-                Write-Log "-" * 40 -NoTimestamp
+                Write-Log ("-" * 40) -NoTimestamp
                 Write-Log "Processing user: $($user.Email) (SamAccountName: $($user.SamAccountName))" -Level "INFO"
                 
                 # Resolve hostname to IP
@@ -1266,9 +1266,9 @@ function Main {
         # Run sync
         Sync-BrowserRDPApplications
         
-        Write-Log "=" * 80 -NoTimestamp
+        Write-Log ("=" * 80) -NoTimestamp
         Write-Log "$ScriptName completed successfully" -Level "SUCCESS"
-        Write-Log "=" * 80 -NoTimestamp
+        Write-Log ("=" * 80) -NoTimestamp
     }
     catch {
         Write-Log "Script failed: $($_.Exception.Message)" -Level "ERROR"
