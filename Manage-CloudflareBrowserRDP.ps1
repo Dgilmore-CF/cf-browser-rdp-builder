@@ -909,15 +909,6 @@ function New-CloudflareAccessPolicy {
         require    = @()
     }
     
-    # Add identity provider requirement if specified
-    if (-not [string]::IsNullOrEmpty($script:Config.IdentityProviderId)) {
-        $body.include += @{
-            identity_provider = @{
-                id = $script:Config.IdentityProviderId
-            }
-        }
-    }
-    
     $response = Invoke-CloudflareApi -Endpoint "/accounts/$($script:Config.CloudflareAccountId)/access/apps/$AppId/policies" -Method "POST" -Body $body
     
     if ($response.result) {
