@@ -818,30 +818,23 @@ function New-CloudflareAccessApplication {
         return @{ id = "dry-run-app-id"; name = $Name }
     }
     
-    # Create self-hosted app with browser rendering settings for RDP
+    # Create RDP app with browser rendering settings
     $body = @{
+        type                       = "rdp"
         name                       = $Name
-        type                       = "self_hosted"
         domain                     = $PublicHostname
         session_duration           = "24h"
-        auto_redirect_to_identity  = $false
         app_launcher_visible       = $true
-        
-        # Browser rendering settings for RDP
-        browser_rendering = @{
-            type = "rdp"
-        }
+        auto_redirect_to_identity  = $false
         
         # Target criteria for RDP - specifies which infrastructure target to connect to
         target_criteria = @(
             @{
-                target_attributes = @(
-                    @{
-                        name   = "hostname"
-                        values = @($TargetHostname)
-                    }
-                )
-                port = 3389
+                target_attributes = @{
+                    hostname = @($TargetHostname)
+                }
+                port     = 3389
+                protocol = "RDP"
             }
         )
     }
